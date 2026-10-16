@@ -10,7 +10,6 @@ import {
   ChevronDown,
   CircleAlert,
   Clock,
-  DollarSign,
   Hash,
   Mail,
 } from 'lucide-react';
@@ -19,16 +18,25 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  InputGroupText,
+} from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { CURRENCIES, currencySymbol } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 
 export type InvoiceFields = {
   clientName: string;
   amount: string;
+  currency: string;
   dueDate: string;
   daysOverdue: string;
   workDescription: string;
@@ -73,6 +81,76 @@ function Field({ name, title, icon: Icon, aside, value, onChange, ...inputProps 
           onChange={(e) => onChange(name, e.target.value)}
           {...inputProps}
         />
+      </InputGroup>
+    </div>
+  );
+}
+
+function AmountField({
+  amount,
+  currency,
+  onChange,
+}: {
+  amount: string;
+  currency: string;
+  onChange: (name: keyof InvoiceFields, value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex min-h-5 items-center">
+        <Label htmlFor="amount">Amount</Label>
+      </div>
+      <InputGroup data-field="amount">
+        <InputGroupAddon>
+          <InputGroupText>{currencySymbol(currency)}</InputGroupText>
+        </InputGroupAddon>
+        <InputGroupInput
+          id="amount"
+          name="amount"
+          value={amount}
+          onChange={(e) => onChange('amount', e.target.value)}
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="0.01"
+          placeholder="1200.00"
+        />
+        <InputGroupAddon align="inline-end">
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <InputGroupButton data-field="currency" aria-label={`Currency: ${currency}. Change currency`}>
+                {currency}
+                <ChevronDown />
+              </InputGroupButton>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-0" align="end">
+              <Command>
+                <CommandInput placeholder="Search currency…" />
+                <CommandList>
+                  <CommandEmpty>No currency found.</CommandEmpty>
+                  <CommandGroup>
+                    {CURRENCIES.map(({ code, name }) => (
+                      <CommandItem
+                        key={code}
+                        value={`${code} ${name}`}
+                        data-checked={code === currency}
+                        onSelect={() => {
+                          onChange('currency', code);
+                          setOpen(false);
+                        }}
+                      >
+                        <span className="w-10 font-medium">{code}</span>
+                        <span className="truncate text-muted-foreground">{name}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </InputGroupAddon>
       </InputGroup>
     </div>
   );
@@ -201,18 +279,7 @@ export function InvoiceForm({ form, onChange, extractedFrom, highlight, loading,
             placeholder="Acme Studio"
             autoComplete="organization"
           />
-          <Field
-            name="amount"
-            title="Amount ($)"
-            icon={DollarSign}
-            value={form.amount}
-            onChange={onChange}
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="0.01"
-            placeholder="1200.00"
-          />
+          <AmountField amount={form.amount} currency={form.currency} onChange={onChange} />
           <DateField name="dueDate" title="Due date" value={form.dueDate} onChange={onChange} />
           <Field
             name="daysOverdue"

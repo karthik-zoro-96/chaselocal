@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server';
 import os from 'node:os';
 import { PDFParse } from 'pdf-parse';
 import { createWorker } from 'tesseract.js';
+import { extractFields } from '@/lib/extract';
+import { ModelError } from '@/lib/model';
+import { rateLimit } from '@/lib/rate-limit';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png'];
+const MAX_BYTES = 10 * 1024 * 1024;
 
 async function readPdf(buffer: Buffer) {
   const parser = new PDFParse({ data: buffer });
@@ -24,6 +28,9 @@ async function readImage(buffer: Buffer) {
 }
 
 export async function POST(req: Request) {
+  const limited = rateLimit(req);
+  if (limited) return limited;
+
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
@@ -41,6 +48,10 @@ export async function POST(req: Request) {
       );
     }
 
+    if (file.size > MAX_BYTES) {
+      return NextResponse.json({ error: 'File is too large. The limit is 10 MB.' }, { status: 413 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const text = isPdf ? await readPdf(buffer) : await readImage(buffer);
 
@@ -55,20 +66,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const extractRes = await fetch(new URL('/api/extract', req.url), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-
-    const extractData = await extractRes.json();
-    if (!extractRes.ok) {
-      return NextResponse.json(extractData, { status: extractRes.status });
-    }
-
-    return NextResponse.json(extractData);
+    return NextResponse.json({ extracted: await extractFields(text) });
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: 'Failed to process invoice' }, { status: 500 });
+    const message = error instanceof ModelError ? error.message : 'Failed to process invoice';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

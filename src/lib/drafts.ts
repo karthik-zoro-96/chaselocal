@@ -52,6 +52,12 @@ export function readTime(text: string) {
   return seconds < 60 ? `~${seconds} sec read` : `~${Math.round(seconds / 60)} min read`;
 }
 
+export function recommendedStage(daysOverdue: string) {
+  const days = Number(daysOverdue);
+  if (!daysOverdue || !Number.isFinite(days) || days <= 0) return null;
+  return days <= 7 ? 0 : days <= 21 ? 1 : 2;
+}
+
 export function daysSince(isoDate: string) {
   const due = new Date(`${isoDate}T00:00:00`);
   if (Number.isNaN(due.getTime())) return null;
@@ -61,8 +67,9 @@ export function daysSince(isoDate: string) {
 }
 
 const MONTHS = String.raw`(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?`;
+const AMOUNT = String.raw`\d[\d,]*(?:\.\d+)?`;
 const BASE_HIGHLIGHTS = [
-  String.raw`\$\s?\d[\d,]*(?:\.\d{2})?`,
+  String.raw`\p{Sc}\s?${AMOUNT}`,
   String.raw`\b\d{1,2}(?:st|nd|rd|th)?\s+(?:${MONTHS})\s+\d{4}\b`,
   String.raw`\b(?:${MONTHS})\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b`,
   String.raw`\b\d{4}[-‐‑]\d{2}[-‐‑]\d{2}\b`,
@@ -70,11 +77,13 @@ const BASE_HIGHLIGHTS = [
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[-‐‑]/g, '[-‐‑]');
 
-export function highlightParts(text: string, literals: string[]) {
+export function highlightParts(text: string, literals: string[], currency = '') {
+  const code = /^[A-Z]{3}$/.test(currency) ? currency : '';
   const patterns = [
     ...literals.filter((l) => l.trim().length > 2).map(escape),
+    ...(code ? [`${code}\\s?${AMOUNT}`, `${AMOUNT}\\s?${code}\\b`] : []),
     ...BASE_HIGHLIGHTS,
   ];
-  const re = new RegExp(`(${patterns.join('|')})`, 'gi');
+  const re = new RegExp(`(${patterns.join('|')})`, 'giu');
   return text.split(re).map((part, i) => ({ text: part, highlight: i % 2 === 1 }));
 }

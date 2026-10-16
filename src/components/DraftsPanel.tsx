@@ -11,7 +11,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { STAGES, highlightParts, readTime, splitSubject, wordCount, type Draft } from '@/lib/drafts';
+import {
+  STAGES,
+  highlightParts,
+  readTime,
+  recommendedStage,
+  splitSubject,
+  wordCount,
+  type Draft,
+} from '@/lib/drafts';
 
 const TWEAKS = [
   { id: 'payment-link', label: 'Add payment link', icon: Link },
@@ -23,6 +31,8 @@ type Props = {
   drafts: Draft[] | null;
   raw: string;
   highlights: string[];
+  currency: string;
+  daysOverdue: string;
   onUpdate: (index: number, draft: Draft) => void;
 };
 
@@ -51,8 +61,9 @@ export function DraftsSkeleton() {
   );
 }
 
-export function DraftsPanel({ drafts, raw, highlights, onUpdate }: Props) {
-  const [active, setActive] = useState('0');
+export function DraftsPanel({ drafts, raw, highlights, currency, daysOverdue, onUpdate }: Props) {
+  const recommended = recommendedStage(daysOverdue);
+  const [active, setActive] = useState(String(recommended ?? 0));
   const [tweaking, setTweaking] = useState<string | null>(null);
 
   const copy = async (text: string, what: string) => {
@@ -102,11 +113,18 @@ export function DraftsPanel({ drafts, raw, highlights, onUpdate }: Props) {
         </Card>
       ) : (
         <Tabs value={active} onValueChange={setActive}>
+          {recommended !== null && (
+            <p className="text-sm text-muted-foreground">
+              The invoice is {daysOverdue} {Number(daysOverdue) === 1 ? 'day' : 'days'} overdue, so we suggest
+              the <span className="font-medium text-foreground">{STAGES[recommended].label}</span> draft.
+            </p>
+          )}
           <TabsList className="w-full">
             {STAGES.map((s, i) => (
               <TabsTrigger key={s.label} value={String(i)}>
                 <span className={`size-1.5 rounded-full ${s.dot}`} />
                 {s.label}
+                {i === recommended && <span className="sr-only">(recommended)</span>}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -139,7 +157,10 @@ export function DraftsPanel({ drafts, raw, highlights, onUpdate }: Props) {
                   >
                     <Card>
                       <CardHeader className="sm:grid-cols-[1fr_auto]">
-                        <CardTitle>{stage.stage}</CardTitle>
+                        <CardTitle className="flex flex-wrap items-center gap-2">
+                          {stage.stage}
+                          {i === recommended && <Badge>Recommended</Badge>}
+                        </CardTitle>
                         <CardDescription>
                           Recommended for {stage.recommended} · {readTime(draft.body)} · {wordCount(draft.body)} words
                         </CardDescription>
@@ -174,7 +195,7 @@ export function DraftsPanel({ drafts, raw, highlights, onUpdate }: Props) {
                         )}
 
                         <div className="rounded-lg border bg-muted/40 p-4 text-sm leading-7 break-words whitespace-pre-wrap">
-                          {highlightParts(draft.body, highlights).map((part, j) =>
+                          {highlightParts(draft.body, highlights, currency).map((part, j) =>
                             part.highlight ? (
                               <mark key={j} className="rounded-sm bg-muted px-1 py-0.5 font-medium text-foreground">
                                 {part.text}

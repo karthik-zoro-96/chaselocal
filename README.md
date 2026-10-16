@@ -6,9 +6,9 @@ Built for freelancers and small studios who'd rather not spend twenty minutes wo
 
 ## What it does
 
-1. **Upload the invoice** — PDF, JPG, or PNG. Or type the details in yourself.
-2. **Check the details** — client, amount, due date, invoice number, and work description are extracted for you. Days overdue is calculated from the due date. Add any earlier messages for context.
-3. **Pick a tone** — get three escalating drafts, each with a subject line. Copy one, open it in your email app, or use a quick tweak: add a payment link placeholder, make it more concise, or make it more direct.
+1. **Upload the invoice** — PDF, JPG, or PNG. Or type the details in yourself, or click **Try a sample invoice**.
+2. **Check the details** — client, amount, currency, due date, invoice number, and work description are extracted for you. Any ISO currency works, and days overdue is calculated from the due date. Add any earlier messages for context.
+3. **Pick a tone** — get three escalating drafts, each with a subject line. The one that fits how late the payment is opens first. Copy it, open it in your email app, or use a quick tweak: add a payment link placeholder, make it more concise, or make it more direct.
 
 The prompts tell the model to use only the facts you provide, so drafts don't invent dates, amounts, or promises.
 

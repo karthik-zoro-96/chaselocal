@@ -11,11 +11,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { DEFAULT_CURRENCY } from '@/lib/currency';
 import { daysSince, splitDrafts, type Draft } from '@/lib/drafts';
 
 const EMPTY_FORM: InvoiceFields = {
   clientName: '',
   amount: '',
+  currency: DEFAULT_CURRENCY,
   dueDate: '',
   daysOverdue: '',
   workDescription: '',
@@ -23,7 +25,7 @@ const EMPTY_FORM: InvoiceFields = {
   invoiceNumber: '',
 };
 
-const EXTRACTED_FIELDS = ['clientName', 'amount', 'dueDate', 'workDescription', 'invoiceNumber'] as const;
+const EXTRACTED_FIELDS = ['clientName', 'amount', 'currency', 'dueDate', 'workDescription', 'invoiceNumber'] as const;
 
 const STEPS = [
   { icon: FileText, title: 'Add the invoice', text: 'Upload a PDF or photo, or type the details in yourself.' },
@@ -46,6 +48,7 @@ export default function Home() {
 
   const [rawDrafts, setRawDrafts] = useState('');
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [draftsOverdue, setDraftsOverdue] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -97,11 +100,23 @@ export default function Home() {
     setExtractedFrom('');
   };
 
+  const loadSample = async () => {
+    try {
+      const res = await fetch('/sample-invoice.pdf');
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      await handleFile(new File([blob], 'sample-invoice.pdf', { type: 'application/pdf' }));
+    } catch {
+      setUploadError('Could not load the sample invoice');
+    }
+  };
+
   const generate = async () => {
     setLoading(true);
     setError('');
     setRawDrafts('');
     setDrafts(null);
+    setDraftsOverdue(form.daysOverdue);
     requestAnimationFrame(() =>
       document.getElementById('drafts-area')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     );
@@ -146,6 +161,7 @@ export default function Home() {
               error={uploadError}
               onFile={handleFile}
               onClear={clearFile}
+              onSample={loadSample}
             />
 
             <InvoiceForm
@@ -169,6 +185,8 @@ export default function Home() {
                       drafts={drafts}
                       raw={rawDrafts}
                       highlights={[form.invoiceNumber, form.workDescription]}
+                      currency={form.currency}
+                      daysOverdue={draftsOverdue}
                       onUpdate={updateDraft}
                     />
                   )

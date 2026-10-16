@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { chat, ModelError } from '@/lib/model';
+import { rateLimit } from '@/lib/rate-limit';
 
 const TWEAKS: Record<string, string> = {
   'payment-link':
@@ -8,23 +10,15 @@ const TWEAKS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
+  const limited = rateLimit(req);
+  if (limited) return limited;
+
   try {
     const { subject, body, tweak, stage } = await req.json();
 
     const instruction = TWEAKS[tweak];
     if (!instruction || !body) {
       return NextResponse.json({ error: 'Invalid tweak request' }, { status: 400 });
-    }
-
-    const apiKey = process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY;
-    const baseURL = process.env.OPENAI_BASE_URL || 'https://api.groq.com/openai/v1';
-    const model = process.env.MODEL_NAME || 'llama-3.1-8b-instant';
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'Missing API key. Set OPENAI_API_KEY or GROQ_API_KEY in .env.local' },
-        { status: 500 }
-      );
     }
 
     const systemPrompt = `You revise a single follow-up email that a freelancer is sending about an overdue invoice.
@@ -38,32 +32,14 @@ Subject: <subject line>
 
 <email body>`;
 
-    const response = await fetch(`${baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: `Change requested: ${instruction}\n\nSubject: ${subject || ''}\n\n${body}`,
-          },
-        ],
-        temperature: 0.5,
-      }),
-    });
+    const draft = await chat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Change requested: ${instruction}\n\nSubject: ${subject || ''}\n\n${body}` },
+      ],
+      0.5
+    );
 
-    if (!response.ok) {
-      console.error(await response.text());
-      return NextResponse.json({ error: 'Model API error. Check key and model name.' }, { status: 500 });
-    }
-
-    const data = await response.json();
-    const draft = data.choices?.[0]?.message?.content?.trim();
     if (!draft) {
       return NextResponse.json({ error: 'The model returned an empty draft.' }, { status: 500 });
     }
@@ -71,6 +47,7 @@ Subject: <subject line>
     return NextResponse.json({ draft });
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: 'Failed to refine draft.' }, { status: 500 });
+    const message = error instanceof ModelError ? error.message : 'Failed to refine draft.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -19,9 +19,10 @@ type Props = {
   error: string;
   onFile: (file: File) => void;
   onClear: () => void;
+  onSample: () => void;
 };
 
-export function UploadCard({ fileName, extracting, error, onFile, onClear }: Props) {
+export function UploadCard({ fileName, extracting, error, onFile, onClear, onSample }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -90,6 +91,19 @@ export function UploadCard({ fileName, extracting, error, onFile, onClear }: Pro
             onChange={(e) => pick(e.target.files?.[0])}
           />
         </div>
+
+        <p className="flex flex-wrap items-center gap-x-1 text-sm text-muted-foreground">
+          No invoice handy?
+          <Button variant="link" size="sm" className="h-auto px-0" onClick={onSample} disabled={extracting}>
+            Try a sample invoice
+          </Button>
+          <span aria-hidden>·</span>
+          <Button variant="link" size="sm" className="h-auto px-0 text-muted-foreground" asChild>
+            <a href="/sample-invoice.pdf" target="_blank" rel="noopener noreferrer">
+              View it
+            </a>
+          </Button>
+        </p>
 
         <AnimatePresence>
           {fileName && !extracting && (
