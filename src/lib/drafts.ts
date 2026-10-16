@@ -1,9 +1,9 @@
 export type Draft = { label: string; subject: string; body: string };
 
 export const STAGES = [
-  { label: 'Polite', range: 'Days 1–7', stage: 'Stage 1: Friendly Follow-up', recommended: 'Day 1–7', dot: 'bg-emerald-500' },
-  { label: 'Firm', range: 'Days 8–21', stage: 'Stage 2: Firm Reminder', recommended: 'Day 8–21', dot: 'bg-amber-500' },
-  { label: 'Final Notice', range: 'Pre-collections', stage: 'Stage 3: Final Notice', recommended: 'Day 22+', dot: 'bg-red-500' },
+  { label: 'Polite', stage: 'Stage 1: Friendly Follow-up', recommended: 'Day 1–7', dot: 'bg-emerald-500' },
+  { label: 'Firm', stage: 'Stage 2: Firm Reminder', recommended: 'Day 8–21', dot: 'bg-amber-500' },
+  { label: 'Final Notice', stage: 'Stage 3: Final Notice', recommended: 'Day 22+', dot: 'bg-red-500' },
 ] as const;
 
 const DRAFT_HEADING =

@@ -1,13 +1,6 @@
 import { Mail } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ThemeToggle } from './ThemeToggle';
-
-const NAV = [
-  { href: '#top', label: 'Overview' },
-  { href: '#how-it-works', label: 'How It Works' },
-  { href: '#drafts-area', label: 'Email Templates' },
-];
 
 export function Header() {
   return (
@@ -19,20 +12,12 @@ export function Header() {
           </span>
           <span className="font-semibold">ChaseLocal</span>
         </a>
-        <Separator orientation="vertical" className="hidden h-5! lg:block" />
-        <span className="hidden truncate text-sm text-muted-foreground lg:block">
+        <Separator orientation="vertical" className="hidden h-5! sm:block" />
+        <span className="hidden truncate text-sm text-muted-foreground sm:block">
           Turn overdue invoices into polite follow-ups
         </span>
 
-        <nav className="ml-auto hidden items-center gap-1 md:flex">
-          {NAV.map((item) => (
-            <Button key={item.href} variant="ghost" size="sm" asChild>
-              <a href={item.href}>{item.label}</a>
-            </Button>
-          ))}
-        </nav>
-
-        <div className="ml-auto md:ml-2">
+        <div className="ml-auto">
           <ThemeToggle />
         </div>
       </div>

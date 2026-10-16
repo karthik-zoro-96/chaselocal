@@ -131,7 +131,7 @@ export default function Home() {
       <TooltipProvider delayDuration={300}>
         <Header />
 
-        <main id="top" className="flex-1 scroll-mt-20">
+        <main id="top" className="flex-1">
           <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Smart Follow-up Generator</h1>
@@ -185,7 +185,7 @@ export default function Home() {
               </AlertDescription>
             </Alert>
 
-            <section id="how-it-works" className="scroll-mt-20">
+            <section>
               <h2 className="mb-3 text-xl font-semibold tracking-tight">How it works</h2>
               <ol className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {STEPS.map(({ icon: Icon, title, text }, i) => (
