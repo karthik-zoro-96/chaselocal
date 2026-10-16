@@ -1,62 +1,110 @@
 'use client';
 
 import { useState } from 'react';
+import { AnimatePresence, MotionConfig } from 'motion/react';
+import { FileText, Lightbulb, ListChecks, Send } from 'lucide-react';
+import { Header } from '@/components/Header';
+import { UploadCard, ACCEPTED_TYPES } from '@/components/UploadCard';
+import { InvoiceForm, type InvoiceFields } from '@/components/InvoiceForm';
+import { DraftsPanel, DraftsSkeleton } from '@/components/DraftsPanel';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { daysSince, splitDrafts, type Draft } from '@/lib/drafts';
+
+const EMPTY_FORM: InvoiceFields = {
+  clientName: '',
+  amount: '',
+  dueDate: '',
+  daysOverdue: '',
+  workDescription: '',
+  previousMessage: '',
+  invoiceNumber: '',
+};
+
+const EXTRACTED_FIELDS = ['clientName', 'amount', 'dueDate', 'workDescription', 'invoiceNumber'] as const;
+
+const STEPS = [
+  { icon: FileText, title: 'Add the invoice', text: 'Upload a PDF or photo, or type the details in yourself.' },
+  { icon: ListChecks, title: 'Check the details', text: 'Fix anything the extraction missed and add prior messages for context.' },
+  { icon: Send, title: 'Send the right tone', text: 'Pick Polite, Firm, or Final Notice, tweak it, and send it from your email app.' },
+];
+
+function overdueFrom(dueDate: string) {
+  const days = daysSince(dueDate);
+  return days === null ? '' : String(Math.max(0, days));
+}
 
 export default function Home() {
-  const [form, setForm] = useState({
-    clientName: '',
-    amount: '',
-    dueDate: '',
-    daysOverdue: '',
-    workDescription: '',
-    previousMessage: '',
-    invoiceNumber: '',
-  });
-  const [drafts, setDrafts] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState<InvoiceFields>(EMPTY_FORM);
+  const [fileName, setFileName] = useState('');
+  const [extractedFrom, setExtractedFrom] = useState('');
   const [extracting, setExtracting] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [highlight, setHighlight] = useState<{ fields: string[]; id: number }>({ fields: [], id: 0 });
+
+  const [rawDrafts, setRawDrafts] = useState('');
+  const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const updateField = (name: keyof InvoiceFields, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'dueDate' ? { daysOverdue: overdueFrom(value) } : {}),
+    }));
   };
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFile = async (file: File) => {
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setUploadError('Unsupported file type. Upload a PDF, JPG, or PNG.');
+      return;
+    }
 
     setExtracting(true);
-    setError('');
+    setUploadError('');
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
 
       const extracted = data.extracted || {};
-      setForm((prev) => ({
-        ...prev,
-        clientName: extracted.clientName || prev.clientName,
-        amount: extracted.amount || prev.amount,
-        dueDate: extracted.dueDate || prev.dueDate,
-        workDescription: extracted.workDescription || prev.workDescription,
-        invoiceNumber: extracted.invoiceNumber || prev.invoiceNumber,
+      setForm((prev) => {
+        const next = { ...prev };
+        for (const name of EXTRACTED_FIELDS) next[name] = extracted[name] || prev[name];
+        if (extracted.dueDate) next.daysOverdue = overdueFrom(extracted.dueDate);
+        return next;
+      });
+      setFileName(file.name);
+      setExtractedFrom(file.type === 'application/pdf' ? 'PDF' : 'image');
+      setHighlight((prev) => ({
+        fields: EXTRACTED_FIELDS.filter((name) => extracted[name]),
+        id: prev.id + 1,
       }));
-    } catch (err: any) {
-      setError(err.message || 'Could not extract from invoice');
+    } catch (err) {
+      setUploadError((err instanceof Error && err.message) || 'Could not extract from invoice');
     } finally {
       setExtracting(false);
     }
   };
 
+  const clearFile = () => {
+    setFileName('');
+    setExtractedFrom('');
+  };
+
   const generate = async () => {
     setLoading(true);
     setError('');
-    setDrafts('');
+    setRawDrafts('');
+    setDrafts(null);
+    requestAnimationFrame(() =>
+      document.getElementById('drafts-area')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    );
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -65,130 +113,111 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
-      setDrafts(data.drafts);
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong');
+      setRawDrafts(data.drafts);
+      setDrafts(splitDrafts(data.drafts));
+    } catch (err) {
+      setError((err instanceof Error && err.message) || 'Something went wrong');
     } finally {
       setLoading(false);
     }
   };
 
+  const updateDraft = (index: number, draft: Draft) => {
+    setDrafts((prev) => prev && prev.map((d, i) => (i === index ? draft : d)));
+  };
+
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">ChaseLocal</h1>
-        <p className="text-gray-600 mb-8">
-          Upload an invoice or fill the details, then generate follow-up drafts.
-        </p>
+    <MotionConfig reducedMotion="user">
+      <TooltipProvider delayDuration={300}>
+        <Header />
 
-        <div className="bg-white rounded-lg shadow p-6 space-y-4 mb-6">
-          <h2 className="text-lg font-semibold">Upload invoice (PDF, JPG, or PNG)</h2>
-          <input
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-            onChange={handleUpload}
-            disabled={extracting}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700"
-          />
-          {extracting && <p className="text-sm text-blue-600">Extracting details…</p>}
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Invoice details</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Client name</label>
-            <input
-              name="clientName"
-              value={form.clientName}
-              onChange={handleChange}
-              className="mt-1 w-full border rounded px-3 py-2"
-              placeholder="Jane Smith"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+        <main id="top" className="flex-1 scroll-mt-20">
+          <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Amount ($)</label>
-              <input
-                name="amount"
-                type="number"
-                value={form.amount}
-                onChange={handleChange}
-                className="mt-1 w-full border rounded px-3 py-2"
-                placeholder="1200"
-              />
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Smart Follow-up Generator</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Extract overdue invoice details and draft follow-up emails in three escalating tones.
+              </p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Days overdue</label>
-              <input
-                name="daysOverdue"
-                type="number"
-                value={form.daysOverdue}
-                onChange={handleChange}
-                className="mt-1 w-full border rounded px-3 py-2"
-                placeholder="7"
-              />
+
+            <UploadCard
+              fileName={fileName}
+              extracting={extracting}
+              error={uploadError}
+              onFile={handleFile}
+              onClear={clearFile}
+            />
+
+            <InvoiceForm
+              form={form}
+              onChange={updateField}
+              extractedFrom={extractedFrom}
+              highlight={highlight}
+              loading={loading}
+              error={error}
+              onGenerate={generate}
+            />
+
+            <div id="drafts-area" className="scroll-mt-20">
+              <AnimatePresence mode="wait">
+                {loading ? (
+                  <DraftsSkeleton key="skeleton" />
+                ) : (
+                  rawDrafts && (
+                    <DraftsPanel
+                      key={rawDrafts}
+                      drafts={drafts}
+                      raw={rawDrafts}
+                      highlights={[form.invoiceNumber, form.workDescription]}
+                      onUpdate={updateDraft}
+                    />
+                  )
+                )}
+              </AnimatePresence>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Due date</label>
-            <input
-              name="dueDate"
-              type="date"
-              value={form.dueDate}
-              onChange={handleChange}
-              className="mt-1 w-full border rounded px-3 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Invoice number (optional)</label>
-            <input
-              name="invoiceNumber"
-              value={form.invoiceNumber}
-              onChange={handleChange}
-              className="mt-1 w-full border rounded px-3 py-2"
-              placeholder="INV-001"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Work description</label>
-            <input
-              name="workDescription"
-              value={form.workDescription}
-              onChange={handleChange}
-              className="mt-1 w-full border rounded px-3 py-2"
-              placeholder="Website redesign"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Previous message (optional)</label>
-            <textarea
-              name="previousMessage"
-              value={form.previousMessage}
-              onChange={handleChange}
-              rows={3}
-              className="mt-1 w-full border rounded px-3 py-2"
-              placeholder="Paste any prior follow-up"
-            />
-          </div>
 
-          <button
-            onClick={generate}
-            disabled={loading || !form.clientName || !form.amount}
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Generating…' : 'Generate follow-ups'}
-          </button>
+            <Alert>
+              <Lightbulb />
+              <AlertTitle>Freelancer pro-tip</AlertTitle>
+              <AlertDescription>
+                Attach the original invoice to your follow-up so the client has everything they need to pay, and
+                there&apos;s no &ldquo;I didn&apos;t receive the attachment&rdquo; delay.
+              </AlertDescription>
+            </Alert>
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-        </div>
-
-        {drafts && (
-          <div className="mt-8 bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Drafts</h2>
-            <pre className="whitespace-pre-wrap text-sm text-gray-800">{drafts}</pre>
+            <section id="how-it-works" className="scroll-mt-20">
+              <h2 className="mb-3 text-xl font-semibold tracking-tight">How it works</h2>
+              <ol className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {STEPS.map(({ icon: Icon, title, text }, i) => (
+                  <li key={title}>
+                    <Card size="sm" className="h-full">
+                      <CardHeader>
+                        <CardDescription className="flex items-center gap-2">
+                          <Icon className="size-4" />
+                          Step {i + 1}
+                        </CardDescription>
+                        <CardTitle>{title}</CardTitle>
+                        <CardDescription>{text}</CardDescription>
+                      </CardHeader>
+                    </Card>
+                  </li>
+                ))}
+              </ol>
+            </section>
           </div>
-        )}
-      </div>
-    </main>
+        </main>
+
+        <footer className="border-t">
+          <div className="mx-auto flex max-w-5xl flex-col gap-1 px-4 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <p>
+              <span className="font-medium text-foreground">ChaseLocal</span> — Respectful follow-ups for independent
+              professionals.
+            </p>
+          </div>
+        </footer>
+
+        <Toaster />
+      </TooltipProvider>
+    </MotionConfig>
   );
 }
