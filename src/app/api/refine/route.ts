@@ -13,8 +13,13 @@ export async function POST(req: Request) {
   const limited = rateLimit(req);
   if (limited) return limited;
 
+  const payload = await req.json().catch(() => null);
+  if (!payload || typeof payload !== 'object') {
+    return NextResponse.json({ error: 'Invalid tweak request' }, { status: 400 });
+  }
+
   try {
-    const { subject, body, tweak, stage } = await req.json();
+    const { subject, body, tweak, stage } = payload;
 
     const instruction = TWEAKS[tweak];
     if (!instruction || !body) {

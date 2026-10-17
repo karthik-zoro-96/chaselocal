@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
+import { MAX_PDF_BYTES } from '@/lib/api';
 import { extractFields } from '@/lib/extract';
 import { ModelError } from '@/lib/model';
 import { rateLimit } from '@/lib/rate-limit';
 
-const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_TEXT = 20_000;
+
+class UnreadablePdfError extends Error {}
 
 async function readPdf(buffer: Buffer) {
   // The worker module sets up pdf.js for serverless and must load before pdf-parse.
@@ -13,6 +15,15 @@ async function readPdf(buffer: Buffer) {
   const parser = new PDFParse({ data: buffer });
   try {
     return (await parser.getText()).text || '';
+  } catch (error) {
+    const name = error instanceof Error ? error.name : '';
+    if (name === 'PasswordException') {
+      throw new UnreadablePdfError('This PDF is password-protected. Remove the password or enter details manually.');
+    }
+    if (name === 'InvalidPDFException') {
+      throw new UnreadablePdfError('This PDF looks damaged and could not be opened. Try exporting it again.');
+    }
+    throw error;
   } finally {
     await parser.destroy();
   }
@@ -41,8 +52,8 @@ export async function POST(req: Request) {
           { status: 400 }
         );
       }
-      if (file.size > MAX_BYTES) {
-        return NextResponse.json({ error: 'File is too large. The limit is 10 MB.' }, { status: 413 });
+      if (file.size > MAX_PDF_BYTES) {
+        return NextResponse.json({ error: 'That file is too large. The limit is 4 MB.' }, { status: 413 });
       }
       text = await readPdf(Buffer.from(await file.arrayBuffer()));
     } else {
@@ -63,6 +74,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ extracted: await extractFields(text) });
   } catch (error) {
+    if (error instanceof UnreadablePdfError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error(error);
     const message = error instanceof ModelError ? error.message : 'Failed to process invoice';
     return NextResponse.json({ error: message }, { status: 500 });

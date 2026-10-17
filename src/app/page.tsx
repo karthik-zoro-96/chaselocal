@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { MAX_PDF_BYTES, postApi } from '@/lib/api';
 import { DEFAULT_CURRENCY } from '@/lib/currency';
 import { daysSince, splitDrafts, type Draft } from '@/lib/drafts';
 import { readImageText } from '@/lib/ocr';
@@ -66,6 +67,10 @@ export default function Home() {
       setUploadError('Unsupported file type. Upload a PDF, JPG, or PNG.');
       return;
     }
+    if (file.type === 'application/pdf' && file.size > MAX_PDF_BYTES) {
+      setUploadError('That PDF is too large. The limit is 4 MB.');
+      return;
+    }
 
     setExtracting(true);
     setUploadError('');
@@ -79,11 +84,13 @@ export default function Home() {
         });
         formData.append('text', text);
       }
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const { extracted } = await postApi<{ extracted: Partial<InvoiceFields> }>('/api/upload', formData);
 
-      const extracted = data.extracted || {};
+      const found = EXTRACTED_FIELDS.filter((name) => name !== 'currency' && extracted[name]);
+      if (!found.length) {
+        throw new Error("We couldn't find invoice details in this file. Fill them in below instead.");
+      }
+
       setForm((prev) => {
         const next = { ...prev };
         for (const name of EXTRACTED_FIELDS) next[name] = extracted[name] || prev[name];
@@ -129,13 +136,7 @@ export default function Home() {
       document.getElementById('drafts-area')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     );
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
+      const data = await postApi<{ drafts: string }>('/api/generate', form);
       setRawDrafts(data.drafts);
       setDrafts(splitDrafts(data.drafts));
     } catch (err) {

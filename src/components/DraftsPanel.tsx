@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { postApi } from '@/lib/api';
 import {
   STAGES,
   highlightParts,
@@ -78,13 +79,12 @@ export function DraftsPanel({ drafts, raw, highlights, currency, daysOverdue, on
   const applyTweak = async (draft: Draft, index: number, tweak: string, label: string) => {
     setTweaking(tweak);
     try {
-      const res = await fetch('/api/refine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: draft.subject, body: draft.body, tweak, stage: draft.label }),
+      const data = await postApi<{ draft: string }>('/api/refine', {
+        subject: draft.subject,
+        body: draft.body,
+        tweak,
+        stage: draft.label,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Tweak failed');
       const next = splitSubject(data.draft);
       onUpdate(index, { label: draft.label, subject: next.subject || draft.subject, body: next.body });
       toast.success(`${draft.label} draft updated: ${label.toLowerCase()}`);

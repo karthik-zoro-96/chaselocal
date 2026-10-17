@@ -21,6 +21,11 @@ export async function POST(req: Request) {
   const limited = rateLimit(req);
   if (limited) return limited;
 
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+  }
+
   try {
     const {
       clientName,
@@ -31,7 +36,7 @@ export async function POST(req: Request) {
       workDescription,
       previousMessage,
       invoiceNumber,
-    } = await req.json();
+    } = body;
 
     if (!clientName || !amount) {
       return NextResponse.json(
