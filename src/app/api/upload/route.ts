@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import os from 'node:os';
-import { PDFParse } from 'pdf-parse';
-import { createWorker } from 'tesseract.js';
 import { extractFields } from '@/lib/extract';
 import { ModelError } from '@/lib/model';
 import { rateLimit } from '@/lib/rate-limit';
@@ -10,6 +8,9 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png'];
 const MAX_BYTES = 10 * 1024 * 1024;
 
 async function readPdf(buffer: Buffer) {
+  // The worker module sets up pdf.js for serverless and must load before pdf-parse.
+  await import('pdf-parse/worker');
+  const { PDFParse } = await import('pdf-parse');
   const parser = new PDFParse({ data: buffer });
   try {
     return (await parser.getText()).text || '';
@@ -19,6 +20,7 @@ async function readPdf(buffer: Buffer) {
 }
 
 async function readImage(buffer: Buffer) {
+  const { createWorker } = await import('tesseract.js');
   const worker = await createWorker('eng', undefined, { cachePath: os.tmpdir() });
   try {
     return (await worker.recognize(buffer)).data.text || '';
