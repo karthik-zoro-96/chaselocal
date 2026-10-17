@@ -1,21 +1,32 @@
-import { Mail } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import { Lock, Mail } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
+
+export function PrivacyBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex w-fit items-center gap-1.5 rounded-full border border-emerald-600/25 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-700 dark:text-emerald-400',
+        className
+      )}
+    >
+      <Lock className="size-3" />
+      Photos read on your device · nothing stored
+    </span>
+  );
+}
 
 export function Header() {
   return (
     <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
         <a href="#top" className="flex shrink-0 items-center gap-2">
           <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
             <Mail className="size-4" />
           </span>
           <span className="font-semibold">ChaseLocal</span>
         </a>
-        <Separator orientation="vertical" className="hidden h-5! sm:block" />
-        <span className="hidden truncate text-sm text-muted-foreground sm:block">
-          Turn overdue invoices into polite follow-ups
-        </span>
+        <PrivacyBadge className="max-sm:hidden" />
 
         <div className="ml-auto">
           <ThemeToggle />

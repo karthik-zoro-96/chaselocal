@@ -1,23 +1,13 @@
 'use client';
 
 import { useEffect, useState, type ComponentProps, type ComponentType, type ReactNode } from 'react';
-import { AnimatePresence, motion, useAnimate } from 'motion/react';
+import { useAnimate } from 'motion/react';
 import { format, isValid, parseISO } from 'date-fns';
-import {
-  Briefcase,
-  Building2,
-  CalendarIcon,
-  ChevronDown,
-  CircleAlert,
-  Clock,
-  Hash,
-  Mail,
-} from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Briefcase, Building2, CalendarIcon, ChevronDown, Clock, Hash, Mail, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
-import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   InputGroup,
@@ -47,10 +37,9 @@ export type InvoiceFields = {
 type Props = {
   form: InvoiceFields;
   onChange: (name: keyof InvoiceFields, value: string) => void;
-  extractedFrom: string;
   highlight: { fields: string[]; id: number };
+  hasDrafts: boolean;
   loading: boolean;
-  error: string;
   onGenerate: () => void;
 };
 
@@ -234,7 +223,7 @@ function DateField({
   );
 }
 
-export function InvoiceForm({ form, onChange, extractedFrom, highlight, loading, error, onGenerate }: Props) {
+export function InvoiceForm({ form, onChange, highlight, hasDrafts, loading, onGenerate }: Props) {
   const [scope, animate] = useAnimate<HTMLDivElement>();
 
   useEffect(() => {
@@ -256,20 +245,11 @@ export function InvoiceForm({ form, onChange, extractedFrom, highlight, loading,
     <Card id="details" ref={scope}>
       <CardHeader>
         <CardTitle>Invoice details</CardTitle>
-        <CardDescription>Verify or edit the extracted information before generating drafts.</CardDescription>
-        <CardAction>
-          <AnimatePresence>
-            {extractedFrom && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <Badge variant="secondary">Extracted from {extractedFrom}</Badge>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </CardAction>
+        <CardDescription>Check what we found and fix anything that&apos;s off.</CardDescription>
       </CardHeader>
 
-      <CardContent className="grid gap-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <CardContent className="@container grid gap-4">
+        <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
           <Field
             name="clientName"
             title="Client name"
@@ -330,28 +310,19 @@ export function InvoiceForm({ form, onChange, extractedFrom, highlight, loading,
             className="min-h-20"
           />
         </div>
-
-        <AnimatePresence>
-          {error && (
-            <motion.div key={error} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <Alert variant="destructive">
-                <CircleAlert />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </CardContent>
 
       <CardFooter className="flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-        <p className="text-xs text-muted-foreground">Tone calibrated across 3 escalating stages</p>
+        <p className="text-xs text-muted-foreground">
+          {form.clientName && form.amount ? 'Three tones, from friendly to final' : 'Client name and amount are required'}
+        </p>
         <Button
           onClick={onGenerate}
           disabled={loading || !form.clientName || !form.amount}
           className="w-full sm:w-auto"
         >
-          {loading ? <Spinner /> : <Mail />}
-          {loading ? 'Generating…' : 'Generate follow-ups'}
+          {loading ? <Spinner /> : hasDrafts ? <RefreshCw /> : <Mail />}
+          {loading ? 'Writing drafts…' : hasDrafts ? 'Regenerate' : 'Generate follow-ups'}
         </Button>
       </CardFooter>
     </Card>

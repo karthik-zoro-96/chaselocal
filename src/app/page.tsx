@@ -1,14 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { AnimatePresence, MotionConfig } from 'motion/react';
-import { FileText, Lightbulb, ListChecks, Send } from 'lucide-react';
-import { Header } from '@/components/Header';
-import { UploadCard, ACCEPTED_TYPES } from '@/components/UploadCard';
+import { MotionConfig } from 'motion/react';
+import { FollowUpsPanel, type PanelStatus } from '@/components/FollowUpsPanel';
+import { Header, PrivacyBadge } from '@/components/Header';
 import { InvoiceForm, type InvoiceFields } from '@/components/InvoiceForm';
-import { DraftsPanel, DraftsSkeleton } from '@/components/DraftsPanel';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ACCEPTED_TYPES, FileSummary, UploadCard } from '@/components/UploadCard';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { MAX_PDF_BYTES, postApi } from '@/lib/api';
@@ -30,9 +27,9 @@ const EMPTY_FORM: InvoiceFields = {
 const EXTRACTED_FIELDS = ['clientName', 'amount', 'currency', 'dueDate', 'workDescription', 'invoiceNumber'] as const;
 
 const STEPS = [
-  { icon: FileText, title: 'Add the invoice', text: 'Upload a PDF or photo, or type the details in yourself.' },
-  { icon: ListChecks, title: 'Check the details', text: 'Fix anything the extraction missed and add prior messages for context.' },
-  { icon: Send, title: 'Send the right tone', text: 'Pick Polite, Firm, or Final Notice, tweak it, and send it from your email app.' },
+  ['Add the invoice.', 'We pull out the client, amount, due date and number.'],
+  ['Check the details.', 'Fix anything the extraction missed.'],
+  ['Send the right tone.', 'We suggest a stage based on how late the payment is.'],
 ];
 
 function overdueFrom(dueDate: string) {
@@ -43,16 +40,20 @@ function overdueFrom(dueDate: string) {
 export default function Home() {
   const [form, setForm] = useState<InvoiceFields>(EMPTY_FORM);
   const [fileName, setFileName] = useState('');
-  const [extractedFrom, setExtractedFrom] = useState('');
+  const [source, setSource] = useState('');
+  const [manual, setManual] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [highlight, setHighlight] = useState<{ fields: string[]; id: number }>({ fields: [], id: 0 });
 
   const [rawDrafts, setRawDrafts] = useState('');
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
-  const [draftsOverdue, setDraftsOverdue] = useState('');
+  const [generation, setGeneration] = useState({ id: 0, overdue: '', snapshot: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const status: PanelStatus = loading ? 'loading' : error ? 'error' : rawDrafts ? 'ready' : 'empty';
+  const stale = status === 'ready' && generation.snapshot !== JSON.stringify(form);
 
   const updateField = (name: keyof InvoiceFields, value: string) => {
     setForm((prev) => ({
@@ -60,6 +61,26 @@ export default function Home() {
       [name]: value,
       ...(name === 'dueDate' ? { daysOverdue: overdueFrom(value) } : {}),
     }));
+  };
+
+  const generate = async (fields: InvoiceFields = form) => {
+    setLoading(true);
+    setError('');
+    setRawDrafts('');
+    setDrafts(null);
+    setGeneration((prev) => ({ id: prev.id + 1, overdue: fields.daysOverdue, snapshot: JSON.stringify(fields) }));
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      setTimeout(() => document.getElementById('follow-ups')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+    try {
+      const data = await postApi<{ drafts: string }>('/api/generate', fields);
+      setRawDrafts(data.drafts);
+      setDrafts(splitDrafts(data.drafts));
+    } catch (err) {
+      setError((err instanceof Error && err.message) || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFile = async (file: File) => {
@@ -88,31 +109,26 @@ export default function Home() {
 
       const found = EXTRACTED_FIELDS.filter((name) => name !== 'currency' && extracted[name]);
       if (!found.length) {
-        throw new Error("We couldn't find invoice details in this file. Fill them in below instead.");
+        throw new Error("We couldn't find invoice details in this file. Try another file or enter the details manually.");
       }
 
-      setForm((prev) => {
-        const next = { ...prev };
-        for (const name of EXTRACTED_FIELDS) next[name] = extracted[name] || prev[name];
-        if (extracted.dueDate) next.daysOverdue = overdueFrom(extracted.dueDate);
-        return next;
-      });
+      const next = { ...form };
+      for (const name of EXTRACTED_FIELDS) next[name] = extracted[name] || form[name];
+      if (extracted.dueDate) next.daysOverdue = overdueFrom(extracted.dueDate);
+
+      setForm(next);
       setFileName(file.name);
-      setExtractedFrom(file.type === 'application/pdf' ? 'PDF' : 'image');
+      setSource(file.type === 'application/pdf' ? 'PDF' : 'photo');
       setHighlight((prev) => ({
         fields: EXTRACTED_FIELDS.filter((name) => extracted[name]),
         id: prev.id + 1,
       }));
+      if (next.clientName && next.amount) generate(next);
     } catch (err) {
       setUploadError((err instanceof Error && err.message) || 'Could not extract from invoice');
     } finally {
       setExtracting(false);
     }
-  };
-
-  const clearFile = () => {
-    setFileName('');
-    setExtractedFrom('');
   };
 
   const loadSample = async () => {
@@ -126,24 +142,15 @@ export default function Home() {
     }
   };
 
-  const generate = async () => {
-    setLoading(true);
-    setError('');
+  const startOver = () => {
+    setForm(EMPTY_FORM);
+    setFileName('');
+    setSource('');
+    setManual(false);
+    setUploadError('');
     setRawDrafts('');
     setDrafts(null);
-    setDraftsOverdue(form.daysOverdue);
-    requestAnimationFrame(() =>
-      document.getElementById('drafts-area')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    );
-    try {
-      const data = await postApi<{ drafts: string }>('/api/generate', form);
-      setRawDrafts(data.drafts);
-      setDrafts(splitDrafts(data.drafts));
-    } catch (err) {
-      setError((err instanceof Error && err.message) || 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
+    setError('');
   };
 
   const updateDraft = (index: number, draft: Draft) => {
@@ -156,90 +163,78 @@ export default function Home() {
         <Header />
 
         <main id="top" className="flex-1">
-          <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Smart Follow-up Generator</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Extract overdue invoice details and draft follow-up emails in three escalating tones.
-              </p>
+          <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-8 sm:px-6 sm:py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-10">
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+                  Chase the invoice, not the client.
+                </h1>
+                <p className="text-pretty text-muted-foreground">
+                  Drop an overdue invoice and get three follow-ups that escalate politely, from a friendly nudge to a
+                  final notice.
+                </p>
+                <PrivacyBadge className="sm:hidden" />
+              </div>
+
+              {fileName || manual ? (
+                <>
+                  <FileSummary fileName={fileName} source={source} onReset={startOver} />
+                  <InvoiceForm
+                    form={form}
+                    onChange={updateField}
+                    highlight={highlight}
+                    hasDrafts={!!rawDrafts}
+                    loading={loading}
+                    onGenerate={() => generate()}
+                  />
+                </>
+              ) : (
+                <>
+                  <UploadCard
+                    extracting={extracting}
+                    error={uploadError}
+                    onFile={handleFile}
+                    onSample={loadSample}
+                    onManual={() => {
+                      setUploadError('');
+                      setManual(true);
+                    }}
+                  />
+                  <ol className="space-y-3 border-t pt-5 text-sm">
+                    {STEPS.map(([title, text], i) => (
+                      <li key={title} className="flex gap-3">
+                        <span className="pt-px font-mono text-xs text-muted-foreground">0{i + 1}</span>
+                        <p>
+                          <span className="font-medium">{title}</span>{' '}
+                          <span className="text-muted-foreground">{text}</span>
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
             </div>
 
-            <UploadCard
-              fileName={fileName}
-              extracting={extracting}
-              error={uploadError}
-              onFile={handleFile}
-              onClear={clearFile}
-              onSample={loadSample}
-            />
-
-            <InvoiceForm
-              form={form}
-              onChange={updateField}
-              extractedFrom={extractedFrom}
-              highlight={highlight}
-              loading={loading}
+            <FollowUpsPanel
+              key={generation.id}
+              status={status}
+              drafts={drafts}
+              raw={rawDrafts}
               error={error}
-              onGenerate={generate}
+              stale={stale}
+              highlights={[form.invoiceNumber, form.workDescription]}
+              currency={form.currency}
+              daysOverdue={generation.overdue}
+              onUpdate={updateDraft}
+              onRegenerate={() => generate()}
             />
-
-            <div id="drafts-area" className="scroll-mt-20">
-              <AnimatePresence mode="wait">
-                {loading ? (
-                  <DraftsSkeleton key="skeleton" />
-                ) : (
-                  rawDrafts && (
-                    <DraftsPanel
-                      key={rawDrafts}
-                      drafts={drafts}
-                      raw={rawDrafts}
-                      highlights={[form.invoiceNumber, form.workDescription]}
-                      currency={form.currency}
-                      daysOverdue={draftsOverdue}
-                      onUpdate={updateDraft}
-                    />
-                  )
-                )}
-              </AnimatePresence>
-            </div>
-
-            <Alert>
-              <Lightbulb />
-              <AlertTitle>Freelancer pro-tip</AlertTitle>
-              <AlertDescription>
-                Attach the original invoice to your follow-up so the client has everything they need to pay, and
-                there&apos;s no &ldquo;I didn&apos;t receive the attachment&rdquo; delay.
-              </AlertDescription>
-            </Alert>
-
-            <section>
-              <h2 className="mb-3 text-xl font-semibold tracking-tight">How it works</h2>
-              <ol className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {STEPS.map(({ icon: Icon, title, text }, i) => (
-                  <li key={title}>
-                    <Card size="sm" className="h-full">
-                      <CardHeader>
-                        <CardDescription className="flex items-center gap-2">
-                          <Icon className="size-4" />
-                          Step {i + 1}
-                        </CardDescription>
-                        <CardTitle>{title}</CardTitle>
-                        <CardDescription>{text}</CardDescription>
-                      </CardHeader>
-                    </Card>
-                  </li>
-                ))}
-              </ol>
-            </section>
           </div>
         </main>
 
         <footer className="border-t">
-          <div className="mx-auto flex max-w-5xl flex-col gap-1 px-4 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <p>
-              <span className="font-medium text-foreground">ChaseLocal</span> — Respectful follow-ups for independent
-              professionals.
-            </p>
+          <div className="mx-auto max-w-6xl px-4 py-5 text-sm text-muted-foreground sm:px-6">
+            <span className="font-medium text-foreground">ChaseLocal</span> · Respectful follow-ups for independent
+            professionals.
           </div>
         </footer>
 
