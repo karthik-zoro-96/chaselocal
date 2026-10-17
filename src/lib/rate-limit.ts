@@ -3,12 +3,13 @@ import { NextResponse } from 'next/server';
 const WINDOW_MS = 10 * 60_000;
 const LIMIT = 30;
 
-// In-memory, so limits are per server process. Fine for a single instance.
+// In-memory, so limits are per server instance rather than global.
 const hits = new Map<string, { count: number; resetAt: number }>();
 
+// Vercel overwrites these with the real client IP, so they can't be spoofed there.
 function clientIp(req: Request) {
   return (
-    req.headers.get('cf-connecting-ip') ||
+    req.headers.get('x-real-ip') ||
     req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
     'local'
   );
