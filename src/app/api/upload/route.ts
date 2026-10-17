@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import os from 'node:os';
 import { extractFields } from '@/lib/extract';
 import { ModelError } from '@/lib/model';
 import { rateLimit } from '@/lib/rate-limit';
 
-const IMAGE_TYPES = ['image/jpeg', 'image/png'];
 const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_TEXT = 20_000;
 
 async function readPdf(buffer: Buffer) {
   // The worker module sets up pdf.js for serverless and must load before pdf-parse.
@@ -19,50 +18,44 @@ async function readPdf(buffer: Buffer) {
   }
 }
 
-async function readImage(buffer: Buffer) {
-  const { createWorker } = await import('tesseract.js');
-  const worker = await createWorker('eng', undefined, { cachePath: os.tmpdir() });
-  try {
-    return (await worker.recognize(buffer)).data.text || '';
-  } finally {
-    await worker.terminate();
-  }
-}
-
+// Accepts either a PDF file, or text that the browser already read from a photo.
 export async function POST(req: Request) {
   const limited = rateLimit(req);
   if (limited) return limited;
 
   try {
     const formData = await req.formData();
-    const file = formData.get('file') as File | null;
+    const file = formData.get('file');
+    const ocrText = formData.get('text');
 
-    if (!file) {
+    let text: string;
+    if (typeof ocrText === 'string') {
+      if (ocrText.length > MAX_TEXT) {
+        return NextResponse.json({ error: 'Too much text in this image.' }, { status: 413 });
+      }
+      text = ocrText;
+    } else if (file instanceof File) {
+      if (file.type !== 'application/pdf') {
+        return NextResponse.json(
+          { error: 'Unsupported file type. Upload a PDF, JPG, or PNG.' },
+          { status: 400 }
+        );
+      }
+      if (file.size > MAX_BYTES) {
+        return NextResponse.json({ error: 'File is too large. The limit is 10 MB.' }, { status: 413 });
+      }
+      text = await readPdf(Buffer.from(await file.arrayBuffer()));
+    } else {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
-
-    const isPdf = file.type === 'application/pdf';
-    const isImage = IMAGE_TYPES.includes(file.type);
-    if (!isPdf && !isImage) {
-      return NextResponse.json(
-        { error: 'Unsupported file type. Upload a PDF, JPG, or PNG.' },
-        { status: 400 }
-      );
-    }
-
-    if (file.size > MAX_BYTES) {
-      return NextResponse.json({ error: 'File is too large. The limit is 10 MB.' }, { status: 413 });
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const text = isPdf ? await readPdf(buffer) : await readImage(buffer);
 
     if (text.trim().length < 10) {
       return NextResponse.json(
         {
-          error: isPdf
-            ? 'Could not read text from this PDF. Try a text-based invoice or enter details manually.'
-            : 'Could not read text from this image. Try a clearer photo or enter details manually.',
+          error:
+            typeof ocrText === 'string'
+              ? 'Could not read text from this image. Try a clearer photo or enter details manually.'
+              : 'Could not read text from this PDF. Try a text-based invoice or enter details manually.',
         },
         { status: 400 }
       );

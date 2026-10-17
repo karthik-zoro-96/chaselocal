@@ -13,6 +13,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { DEFAULT_CURRENCY } from '@/lib/currency';
 import { daysSince, splitDrafts, type Draft } from '@/lib/drafts';
+import { readImageText } from '@/lib/ocr';
 
 const EMPTY_FORM: InvoiceFields = {
   clientName: '',
@@ -70,7 +71,14 @@ export default function Home() {
     setUploadError('');
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      if (file.type === 'application/pdf') {
+        formData.append('file', file);
+      } else {
+        const text = await readImageText(file).catch(() => {
+          throw new Error('Could not read this image. Try a clearer photo or enter details manually.');
+        });
+        formData.append('text', text);
+      }
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');

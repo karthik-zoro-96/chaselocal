@@ -16,17 +16,17 @@ The prompts tell the model to use only the facts you provide, so drafts don't in
 
 | Step | Runs on | Tool |
 | --- | --- | --- |
+| Image OCR | The user's browser | [tesseract.js](https://github.com/naptha/tesseract.js) |
 | PDF text extraction | Your server | [pdf-parse](https://github.com/mehmet-kozan/pdf-parse) |
-| Image OCR | Your server | [tesseract.js](https://github.com/naptha/tesseract.js) |
 | Field extraction, drafting, tweaks | Model provider | Llama 3.1 8B (open-weight) |
 
-Only the extracted text goes to the model, never the file itself. Nothing is stored: there's no database and no account.
+Photos of invoices never leave the user's device: they're read in the browser and only the text is sent on. Only extracted text reaches the model, never the file itself. Nothing is stored: there's no database and no account.
 
 ## Why open models
 
 - **Cheap enough to sell.** A small open-weight model costs a fraction of a cent per invoice, so a low monthly price for freelancers still works as a business.
 - **No lock-in.** The app uses the standard OpenAI-compatible API, so moving to another host (Groq, Together, Fireworks, or your own GPU) is a change to `OPENAI_BASE_URL` and `MODEL_NAME`, not a rewrite.
-- **Open all the way down.** The OCR and PDF parsing are open source too and run alongside the app.
+- **Open all the way down.** The OCR and PDF parsing are open source too. OCR runs in the browser, so photos stay private without anyone installing anything.
 
 ## Getting started
 

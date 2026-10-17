@@ -39,7 +39,7 @@ export function UploadCard({ fileName, extracting, error, onFile, onClear, onSam
     <Card id="upload">
       <CardHeader>
         <CardTitle>Upload invoice</CardTitle>
-        <CardDescription>PDF, JPG, or PNG. Only the extracted text is sent to your configured model.</CardDescription>
+        <CardDescription>PDF, JPG, or PNG. Photos are read right in your browser, and only the extracted text is sent to the model.</CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-3">
