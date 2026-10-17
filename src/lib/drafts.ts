@@ -1,9 +1,9 @@
 export type Draft = { label: string; subject: string; body: string };
 
 export const STAGES = [
-  { label: 'Polite', stage: 'Stage 1: Friendly Follow-up', recommended: 'Day 1–7', dot: 'bg-emerald-500' },
-  { label: 'Firm', stage: 'Stage 2: Firm Reminder', recommended: 'Day 8–21', dot: 'bg-amber-500' },
-  { label: 'Final Notice', stage: 'Stage 3: Final Notice', recommended: 'Day 22+', dot: 'bg-red-500' },
+  { label: 'Polite', range: 'Day 1–7', startsOnDay: 1, dot: 'bg-emerald-500' },
+  { label: 'Firm', range: 'Day 8–21', startsOnDay: 8, dot: 'bg-amber-500' },
+  { label: 'Final Notice', range: 'Day 22+', startsOnDay: 22, dot: 'bg-red-500' },
 ] as const;
 
 const DRAFT_HEADING =
@@ -47,15 +47,17 @@ export function wordCount(text: string) {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-export function readTime(text: string) {
-  const seconds = Math.max(10, Math.round((wordCount(text) / 200) * 60 / 5) * 5);
-  return seconds < 60 ? `~${seconds} sec read` : `~${Math.round(seconds / 60)} min read`;
-}
-
 export function recommendedStage(daysOverdue: string) {
   const days = Number(daysOverdue);
   if (!daysOverdue || !Number.isFinite(days) || days <= 0) return null;
   return days <= 7 ? 0 : days <= 21 ? 1 : 2;
+}
+
+export function stageStartDate(dueDate: string, stage: number) {
+  const due = new Date(`${dueDate}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return null;
+  due.setDate(due.getDate() + STAGES[stage].startsOnDay);
+  return due;
 }
 
 export function daysSince(isoDate: string) {

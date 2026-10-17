@@ -2,10 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { CircleAlert, CircleCheck, PenLine, RotateCcw, Upload } from 'lucide-react';
+import { CircleAlert, FileText, PenLine, RotateCcw, Upload } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
@@ -109,27 +110,69 @@ export function UploadCard({ extracting, error, onFile, onSample, onManual }: Pr
   );
 }
 
-export function FileSummary({ fileName, source, onReset }: { fileName: string; source: string; onReset: () => void }) {
+type SummaryProps = {
+  fileName: string;
+  fieldsRead: number;
+  extracting: boolean;
+  error: string;
+  onFile: (file: File) => void;
+  onReset: () => void;
+};
+
+export function FileSummary({ fileName, fieldsRead, extracting, error, onFile, onReset }: SummaryProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 text-sm">
-      <span className="flex min-w-0 items-center gap-2">
-        {fileName ? (
-          <>
-            <CircleCheck className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span className="truncate font-medium">{fileName}</span>
-            <span className="shrink-0 text-muted-foreground">read from {source}</span>
-          </>
-        ) : (
-          <>
-            <PenLine className="size-4 shrink-0 text-muted-foreground" />
-            <span className="text-muted-foreground">Entering details manually</span>
-          </>
-        )}
-      </span>
-      <Button variant="ghost" size="sm" onClick={onReset}>
-        <RotateCcw />
-        Start over
-      </Button>
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 rounded-xl border bg-card p-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted">
+          {extracting ? (
+            <Spinner className="size-4" />
+          ) : fileName ? (
+            <FileText className="size-4" />
+          ) : (
+            <PenLine className="size-4" />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">
+            {extracting ? 'Reading your invoice…' : fileName || 'Manual entry'}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {fileName ? `Read ${fieldsRead} fields · check them below` : 'Type the details below, or upload a file'}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={extracting}>
+          {fileName ? 'Replace' : 'Upload'}
+        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" onClick={onReset} disabled={extracting} aria-label="Start over">
+              <RotateCcw />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Start over</TooltipContent>
+        </Tooltip>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+          className="sr-only"
+          tabIndex={-1}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onFile(file);
+            e.target.value = '';
+          }}
+        />
+      </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <CircleAlert />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

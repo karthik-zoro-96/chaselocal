@@ -9,14 +9,6 @@ export function isCurrency(code: string) {
   return CODES.includes(code);
 }
 
-export function currencySymbol(code: string) {
-  return (
-    new Intl.NumberFormat('en', { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })
-      .formatToParts(0)
-      .find((part) => part.type === 'currency')?.value ?? code
-  );
-}
-
 export function formatMoney(amount: string, code: string) {
   const value = Number(amount);
   if (!amount || !Number.isFinite(value) || !isCurrency(code)) return `${amount} ${code}`.trim();

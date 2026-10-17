@@ -19,12 +19,15 @@ const EMPTY_FORM: InvoiceFields = {
   currency: DEFAULT_CURRENCY,
   dueDate: '',
   daysOverdue: '',
+  invoiceNumber: '',
+  senderName: '',
   workDescription: '',
   previousMessage: '',
-  invoiceNumber: '',
 };
 
 const EXTRACTED_FIELDS = ['clientName', 'amount', 'currency', 'dueDate', 'workDescription', 'invoiceNumber'] as const;
+
+const SENDER_KEY = 'chaselocal:senderName';
 
 const STEPS = [
   ['Add the invoice.', 'We pull out the client, amount, due date and number.'],
@@ -37,10 +40,23 @@ function overdueFrom(dueDate: string) {
   return days === null ? '' : String(Math.max(0, days));
 }
 
+function storedSender() {
+  try {
+    return localStorage.getItem(SENDER_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+// The sign-off name is filled in on the client, so changing it never makes drafts stale.
+function snapshotOf(fields: InvoiceFields) {
+  return JSON.stringify({ ...fields, senderName: '' });
+}
+
 export default function Home() {
   const [form, setForm] = useState<InvoiceFields>(EMPTY_FORM);
   const [fileName, setFileName] = useState('');
-  const [source, setSource] = useState('');
+  const [fieldsRead, setFieldsRead] = useState(0);
   const [manual, setManual] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -48,14 +64,35 @@ export default function Home() {
 
   const [rawDrafts, setRawDrafts] = useState('');
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
-  const [generation, setGeneration] = useState({ id: 0, overdue: '', snapshot: '' });
+  const [generation, setGeneration] = useState({ id: 0, overdue: '', dueDate: '', snapshot: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const status: PanelStatus = loading ? 'loading' : error ? 'error' : rawDrafts ? 'ready' : 'empty';
-  const stale = status === 'ready' && generation.snapshot !== JSON.stringify(form);
+  const showForm = !!fileName || manual;
+  const status: PanelStatus = loading
+    ? 'loading'
+    : error
+      ? 'error'
+      : rawDrafts
+        ? 'ready'
+        : showForm
+          ? 'idle'
+          : 'waiting';
+  const stale = status === 'ready' && generation.snapshot !== snapshotOf(form);
+  const canGenerate = !!(form.clientName.trim() && form.amount.trim());
+
+  const clearDrafts = () => {
+    setRawDrafts('');
+    setDrafts(null);
+    setError('');
+  };
 
   const updateField = (name: keyof InvoiceFields, value: string) => {
+    if (name === 'senderName') {
+      try {
+        localStorage.setItem(SENDER_KEY, value);
+      } catch {}
+    }
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -63,17 +100,20 @@ export default function Home() {
     }));
   };
 
-  const generate = async (fields: InvoiceFields = form) => {
+  const generate = async () => {
     setLoading(true);
-    setError('');
-    setRawDrafts('');
-    setDrafts(null);
-    setGeneration((prev) => ({ id: prev.id + 1, overdue: fields.daysOverdue, snapshot: JSON.stringify(fields) }));
+    clearDrafts();
+    setGeneration((prev) => ({
+      id: prev.id + 1,
+      overdue: form.daysOverdue,
+      dueDate: form.dueDate,
+      snapshot: snapshotOf(form),
+    }));
     if (window.matchMedia('(max-width: 1023px)').matches) {
       setTimeout(() => document.getElementById('follow-ups')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
     try {
-      const data = await postApi<{ drafts: string }>('/api/generate', fields);
+      const data = await postApi<{ drafts: string }>('/api/generate', form);
       setRawDrafts(data.drafts);
       setDrafts(splitDrafts(data.drafts));
     } catch (err) {
@@ -107,23 +147,21 @@ export default function Home() {
       }
       const { extracted } = await postApi<{ extracted: Partial<InvoiceFields> }>('/api/upload', formData);
 
-      const found = EXTRACTED_FIELDS.filter((name) => name !== 'currency' && extracted[name]);
-      if (!found.length) {
+      const found = EXTRACTED_FIELDS.filter((name) => extracted[name]);
+      if (!found.some((name) => name !== 'currency')) {
         throw new Error("We couldn't find invoice details in this file. Try another file or enter the details manually.");
       }
 
-      const next = { ...form };
-      for (const name of EXTRACTED_FIELDS) next[name] = extracted[name] || form[name];
-      if (extracted.dueDate) next.daysOverdue = overdueFrom(extracted.dueDate);
+      const next = { ...EMPTY_FORM, senderName: form.senderName || storedSender() };
+      for (const name of found) next[name] = extracted[name]!;
+      next.daysOverdue = overdueFrom(next.dueDate);
 
       setForm(next);
       setFileName(file.name);
-      setSource(file.type === 'application/pdf' ? 'PDF' : 'photo');
-      setHighlight((prev) => ({
-        fields: EXTRACTED_FIELDS.filter((name) => extracted[name]),
-        id: prev.id + 1,
-      }));
-      if (next.clientName && next.amount) generate(next);
+      setFieldsRead(found.length);
+      setManual(false);
+      clearDrafts();
+      setHighlight((prev) => ({ fields: [...found], id: prev.id + 1 }));
     } catch (err) {
       setUploadError((err instanceof Error && err.message) || 'Could not extract from invoice');
     } finally {
@@ -142,15 +180,18 @@ export default function Home() {
     }
   };
 
+  const enterManually = () => {
+    setUploadError('');
+    setForm((prev) => ({ ...prev, senderName: prev.senderName || storedSender() }));
+    setManual(true);
+  };
+
   const startOver = () => {
     setForm(EMPTY_FORM);
     setFileName('');
-    setSource('');
     setManual(false);
     setUploadError('');
-    setRawDrafts('');
-    setDrafts(null);
-    setError('');
+    clearDrafts();
   };
 
   const updateDraft = (index: number, draft: Draft) => {
@@ -165,40 +206,36 @@ export default function Home() {
         <main id="top" className="flex-1">
           <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-8 sm:px-6 sm:py-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-10">
             <div className="space-y-6">
-              <div className="space-y-3">
-                <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-                  Chase the invoice, not the client.
-                </h1>
-                <p className="text-pretty text-muted-foreground">
-                  Drop an overdue invoice and get three follow-ups that escalate politely, from a friendly nudge to a
-                  final notice.
-                </p>
-                <PrivacyBadge className="sm:hidden" />
-              </div>
-
-              {fileName || manual ? (
+              {showForm ? (
                 <>
-                  <FileSummary fileName={fileName} source={source} onReset={startOver} />
-                  <InvoiceForm
-                    form={form}
-                    onChange={updateField}
-                    highlight={highlight}
-                    hasDrafts={!!rawDrafts}
-                    loading={loading}
-                    onGenerate={() => generate()}
+                  <FileSummary
+                    fileName={fileName}
+                    fieldsRead={fieldsRead}
+                    extracting={extracting}
+                    error={uploadError}
+                    onFile={handleFile}
+                    onReset={startOver}
                   />
+                  <InvoiceForm form={form} onChange={updateField} highlight={highlight} />
                 </>
               ) : (
                 <>
+                  <div className="space-y-3">
+                    <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+                      Chase the invoice, not the client.
+                    </h1>
+                    <p className="text-pretty text-muted-foreground">
+                      Drop an overdue invoice and get three follow-ups that escalate politely, from a friendly nudge to
+                      a final notice.
+                    </p>
+                    <PrivacyBadge className="sm:hidden" />
+                  </div>
                   <UploadCard
                     extracting={extracting}
                     error={uploadError}
                     onFile={handleFile}
                     onSample={loadSample}
-                    onManual={() => {
-                      setUploadError('');
-                      setManual(true);
-                    }}
+                    onManual={enterManually}
                   />
                   <ol className="space-y-3 border-t pt-5 text-sm">
                     {STEPS.map(([title, text], i) => (
@@ -222,11 +259,14 @@ export default function Home() {
               raw={rawDrafts}
               error={error}
               stale={stale}
+              canGenerate={canGenerate}
               highlights={[form.invoiceNumber, form.workDescription]}
               currency={form.currency}
+              dueDate={generation.dueDate}
               daysOverdue={generation.overdue}
+              senderName={form.senderName}
               onUpdate={updateDraft}
-              onRegenerate={() => generate()}
+              onGenerate={generate}
             />
           </div>
         </main>

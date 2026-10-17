@@ -1,26 +1,20 @@
 'use client';
 
-import { useEffect, useState, type ComponentProps, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import { useAnimate } from 'motion/react';
 import { format, isValid, parseISO } from 'date-fns';
-import { Briefcase, Building2, CalendarIcon, ChevronDown, Clock, Hash, Mail, RefreshCw } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ChevronDown, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-  InputGroupText,
-} from '@/components/ui/input-group';
+import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { CURRENCIES, currencySymbol } from '@/lib/currency';
+import { CURRENCIES } from '@/lib/currency';
+import { daysSince } from '@/lib/drafts';
 import { cn } from '@/lib/utils';
 
 export type InvoiceFields = {
@@ -29,72 +23,59 @@ export type InvoiceFields = {
   currency: string;
   dueDate: string;
   daysOverdue: string;
+  invoiceNumber: string;
+  senderName: string;
   workDescription: string;
   previousMessage: string;
-  invoiceNumber: string;
 };
+
+type Change = (name: keyof InvoiceFields, value: string) => void;
 
 type Props = {
   form: InvoiceFields;
-  onChange: (name: keyof InvoiceFields, value: string) => void;
+  onChange: Change;
   highlight: { fields: string[]; id: number };
-  hasDrafts: boolean;
-  loading: boolean;
-  onGenerate: () => void;
 };
 
-type FieldProps = {
-  name: keyof InvoiceFields;
-  title: string;
-  icon: ComponentType;
-  aside?: ReactNode;
-  value: string;
-  onChange: (name: keyof InvoiceFields, value: string) => void;
-} & Omit<ComponentProps<'input'>, 'name' | 'value' | 'onChange'>;
+const labelClass = 'text-xs font-normal text-muted-foreground';
 
-function Field({ name, title, icon: Icon, aside, value, onChange, ...inputProps }: FieldProps) {
+function Field({
+  name,
+  title,
+  value,
+  onChange,
+  className,
+  ...inputProps
+}: { name: keyof InvoiceFields; title: string; value: string; onChange: Change } & Omit<
+  ComponentProps<'input'>,
+  'name' | 'value' | 'onChange'
+>) {
   return (
-    <div className="grid gap-2">
-      <div className="flex min-h-5 items-center justify-between gap-2">
-        <Label htmlFor={name}>{title}</Label>
-        {aside}
-      </div>
-      <InputGroup data-field={name}>
-        <InputGroupAddon>
-          <Icon />
-        </InputGroupAddon>
-        <InputGroupInput
-          id={name}
-          name={name}
-          value={value}
-          onChange={(e) => onChange(name, e.target.value)}
-          {...inputProps}
-        />
-      </InputGroup>
+    <div className={cn('grid gap-1.5', className)}>
+      <Label htmlFor={name} className={labelClass}>
+        {title}
+      </Label>
+      <Input
+        id={name}
+        name={name}
+        data-field={name}
+        value={value}
+        onChange={(e) => onChange(name, e.target.value)}
+        {...inputProps}
+      />
     </div>
   );
 }
 
-function AmountField({
-  amount,
-  currency,
-  onChange,
-}: {
-  amount: string;
-  currency: string;
-  onChange: (name: keyof InvoiceFields, value: string) => void;
-}) {
+function AmountField({ amount, currency, onChange }: { amount: string; currency: string; onChange: Change }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="grid gap-2">
-      <div className="flex min-h-5 items-center">
-        <Label htmlFor="amount">Amount</Label>
-      </div>
+    <div className="grid gap-1.5">
+      <Label htmlFor="amount" className={labelClass}>
+        Amount
+      </Label>
       <InputGroup data-field="amount">
-        <InputGroupAddon>
-          <InputGroupText>{currencySymbol(currency)}</InputGroupText>
-        </InputGroupAddon>
         <InputGroupInput
           id="amount"
           name="amount"
@@ -161,44 +142,33 @@ function DueDateCalendar({ selected, onSelect }: { selected?: Date; onSelect: (d
   );
 }
 
-function DateField({
-  name,
-  title,
-  value,
-  onChange,
-}: {
-  name: keyof InvoiceFields;
-  title: string;
-  value: string;
-  onChange: (name: keyof InvoiceFields, value: string) => void;
-}) {
+function DateField({ value, onChange }: { value: string; onChange: Change }) {
   const [open, setOpen] = useState(false);
   const parsed = value ? parseISO(value) : undefined;
   const selected = parsed && isValid(parsed) ? parsed : undefined;
 
   return (
-    <div className="grid gap-2">
-      <div className="flex min-h-5 items-center">
-        <Label htmlFor={name}>{title}</Label>
-      </div>
+    <div className="grid gap-1.5">
+      <Label htmlFor="dueDate" className={labelClass}>
+        Due date
+      </Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
-            id={name}
-            data-field={name}
+            id="dueDate"
+            data-field="dueDate"
             variant="outline"
-            className={cn('w-full justify-start px-2 font-normal', !selected && 'text-muted-foreground')}
+            className={cn('w-full justify-between px-2.5 font-normal', !selected && 'text-muted-foreground')}
           >
-            <CalendarIcon className="text-muted-foreground" />
-            {selected ? format(selected, 'PPP') : 'Pick a date'}
-            <ChevronDown className="ml-auto text-muted-foreground" />
+            {selected ? format(selected, 'MMM d, yyyy') : 'Pick a date'}
+            <ChevronDown className="text-muted-foreground" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto overflow-hidden p-0" align="start">
           <DueDateCalendar
             selected={selected}
             onSelect={(date) => {
-              onChange(name, date ? format(date, 'yyyy-MM-dd') : '');
+              onChange('dueDate', date ? format(date, 'yyyy-MM-dd') : '');
               setOpen(false);
             }}
           />
@@ -209,7 +179,7 @@ function DateField({
                 size="sm"
                 className="w-full"
                 onClick={() => {
-                  onChange(name, '');
+                  onChange('dueDate', '');
                   setOpen(false);
                 }}
               >
@@ -223,7 +193,38 @@ function DateField({
   );
 }
 
-export function InvoiceForm({ form, onChange, highlight, hasDrafts, loading, onGenerate }: Props) {
+function StatusField({ dueDate }: { dueDate: string }) {
+  const days = dueDate ? daysSince(dueDate) : null;
+  const overdue = days !== null && days > 0;
+  const text =
+    days === null
+      ? 'Add a due date'
+      : overdue
+        ? `${days} ${days === 1 ? 'day' : 'days'} overdue`
+        : days === 0
+          ? 'Due today'
+          : `Due in ${-days} ${days === -1 ? 'day' : 'days'}`;
+
+  return (
+    <div className="grid gap-1.5">
+      <span className={labelClass}>Status</span>
+      <div
+        role="status"
+        className={cn(
+          'flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm',
+          overdue
+            ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+            : 'text-muted-foreground'
+        )}
+      >
+        <Clock className="size-3.5" />
+        {text}
+      </div>
+    </div>
+  );
+}
+
+export function InvoiceForm({ form, onChange, highlight }: Props) {
   const [scope, animate] = useAnimate<HTMLDivElement>();
 
   useEffect(() => {
@@ -239,92 +240,60 @@ export function InvoiceForm({ form, onChange, highlight, hasDrafts, loading, onG
     ).then(() => groups.forEach((el) => (el.style.boxShadow = '')));
   }, [highlight, animate, scope]);
 
-  const overdue = Number(form.daysOverdue);
-
   return (
     <Card id="details" ref={scope}>
       <CardHeader>
         <CardTitle>Invoice details</CardTitle>
-        <CardDescription>Check what we found and fix anything that&apos;s off.</CardDescription>
       </CardHeader>
-
-      <CardContent className="@container grid gap-4">
-        <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
-          <Field
-            name="clientName"
-            title="Client name"
-            icon={Building2}
-            value={form.clientName}
-            onChange={onChange}
-            placeholder="Acme Studio"
-            autoComplete="organization"
-          />
-          <AmountField amount={form.amount} currency={form.currency} onChange={onChange} />
-          <DateField name="dueDate" title="Due date" value={form.dueDate} onChange={onChange} />
-          <Field
-            name="daysOverdue"
-            title="Days overdue"
-            icon={Clock}
-            value={form.daysOverdue}
-            onChange={onChange}
-            type="number"
-            inputMode="numeric"
-            min={0}
-            placeholder="Auto from due date"
-            aside={
-              overdue > 0 ? (
-                <Badge variant="destructive">
-                  {overdue} {overdue === 1 ? 'day' : 'days'} overdue
-                </Badge>
-              ) : null
-            }
-          />
-          <Field
-            name="invoiceNumber"
-            title="Invoice number"
-            icon={Hash}
-            value={form.invoiceNumber}
-            onChange={onChange}
-            placeholder="INV-001"
-          />
-          <Field
-            name="workDescription"
-            title="Work description"
-            icon={Briefcase}
-            value={form.workDescription}
-            onChange={onChange}
-            placeholder="Design and branding consulting"
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="previousMessage">
-            Previous communication <span className="font-normal text-muted-foreground">(optional)</span>
+      <CardContent className="grid grid-cols-2 gap-x-3 gap-y-4">
+        <Field
+          name="clientName"
+          title="Client"
+          value={form.clientName}
+          onChange={onChange}
+          placeholder="Acme Studio"
+          autoComplete="organization"
+        />
+        <AmountField amount={form.amount} currency={form.currency} onChange={onChange} />
+        <DateField value={form.dueDate} onChange={onChange} />
+        <StatusField dueDate={form.dueDate} />
+        <Field
+          name="invoiceNumber"
+          title="Invoice number"
+          value={form.invoiceNumber}
+          onChange={onChange}
+          placeholder="INV-001"
+        />
+        <Field
+          name="senderName"
+          title="Sign as"
+          value={form.senderName}
+          onChange={onChange}
+          placeholder="Your name"
+          autoComplete="name"
+        />
+        <Field
+          name="workDescription"
+          title="Work description"
+          value={form.workDescription}
+          onChange={onChange}
+          placeholder="Design and branding consulting"
+          className="col-span-2"
+        />
+        <div className="col-span-2 grid gap-1.5">
+          <Label htmlFor="previousMessage" className={labelClass}>
+            Earlier messages · optional
           </Label>
           <Textarea
             id="previousMessage"
             name="previousMessage"
             value={form.previousMessage}
             onChange={(e) => onChange('previousMessage', e.target.value)}
-            placeholder="Paste any prior follow-up conversation or verbal commitment here…"
+            placeholder={'Paste a previous reply or promise, e.g. \u201cWill pay by Friday\u201d'}
             className="min-h-20"
           />
         </div>
       </CardContent>
-
-      <CardFooter className="flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-        <p className="text-xs text-muted-foreground">
-          {form.clientName && form.amount ? 'Three tones, from friendly to final' : 'Client name and amount are required'}
-        </p>
-        <Button
-          onClick={onGenerate}
-          disabled={loading || !form.clientName || !form.amount}
-          className="w-full sm:w-auto"
-        >
-          {loading ? <Spinner /> : hasDrafts ? <RefreshCw /> : <Mail />}
-          {loading ? 'Writing drafts…' : hasDrafts ? 'Regenerate' : 'Generate follow-ups'}
-        </Button>
-      </CardFooter>
     </Card>
   );
 }
