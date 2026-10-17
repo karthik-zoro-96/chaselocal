@@ -6,11 +6,16 @@ import { rateLimit } from '@/lib/rate-limit';
 
 const SYSTEM_PROMPT = `You are a professional assistant that writes follow-up messages for freelancers chasing overdue invoices.
 Write exactly 3 short email drafts labeled:
-1. Polite
-2. Firm
-3. Final Notice
+1. Polite — a friendly check-in that assumes it was an oversight
+2. Firm — state the due date and that it is now N days overdue (when both are known), then ask a direct question such as "When can I expect payment?"
+3. Final Notice — state the amount, the due date and how many days overdue it is, say this is the last reminder, and ask for payment or a reply with a payment date
 
 Rules:
+- Write like a real person, in plain and specific sentences
+- Never use stock phrases such as "at your earliest convenience", "I hope this email finds you well", "kindly", "please do not hesitate", or "thank you in advance"
+- Never use the word "prompt" or thank the client for promptness; end the body on the question or request itself
+- Write the due date exactly as given (e.g. "October 8, 2026")
+- Write the invoice number as "invoice #NUMBER" when it is only digits, otherwise exactly as given
 - Start each draft with a line "Subject: ..." that names the invoice number if given
 - Keep each draft under 120 words
 - Be professional, not aggressive or threatening
@@ -23,7 +28,7 @@ Rules:
 function readableDate(value: unknown) {
   if (typeof value !== 'string' || !value) return '';
   const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? value : format(date, 'd MMMM yyyy');
+  return Number.isNaN(date.getTime()) ? value : format(date, 'MMMM d, yyyy');
 }
 
 export async function POST(req: Request) {

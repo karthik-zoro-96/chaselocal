@@ -32,6 +32,7 @@ Rules:
 - Keep it a "${stage || 'follow-up'}" email
 - Do not invent invoice numbers, amounts, dates, deadlines, late fees, or any facts not already in the email
 - Keep placeholders like [Your Name] as they are
+- Never use stock phrases such as "at your earliest convenience", "prompt attention", "kindly", or "please do not hesitate"
 - Output exactly:
 Subject: <subject line>
 

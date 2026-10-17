@@ -1,6 +1,6 @@
 # ChaseLocal
 
-Turn an overdue invoice into three ready-to-send follow-up emails — Polite, Firm, and Final Notice — in under a minute.
+Turn an overdue invoice into three ready-to-send follow-up emails — Polite, Firm, and Final notice — in under a minute.
 
 Built for freelancers and small studios who'd rather not spend twenty minutes wording a "just checking in" email to a client who owes them money.
 

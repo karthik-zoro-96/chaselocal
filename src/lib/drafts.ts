@@ -1,9 +1,9 @@
 export type Draft = { label: string; subject: string; body: string };
 
 export const STAGES = [
-  { label: 'Polite', range: 'Day 1–7', startsOnDay: 1, dot: 'bg-emerald-500' },
-  { label: 'Firm', range: 'Day 8–21', startsOnDay: 8, dot: 'bg-amber-500' },
-  { label: 'Final Notice', range: 'Day 22+', startsOnDay: 22, dot: 'bg-red-500' },
+  { label: 'Polite', range: 'Day 1–7', startsOnDay: 1, line: 'bg-emerald-500', pill: 'bg-polite-soft text-polite' },
+  { label: 'Firm', range: 'Day 8–21', startsOnDay: 8, line: 'bg-amber-500', pill: 'bg-firm-soft text-firm' },
+  { label: 'Final notice', range: 'Day 22+', startsOnDay: 22, line: 'bg-red-500', pill: 'bg-final-soft text-final' },
 ] as const;
 
 const DRAFT_HEADING =
@@ -15,8 +15,17 @@ function stripEmphasis(text: string) {
   return text.replace(/\*\*\s*(.+?)\s*\*\*/g, '$1').replace(/__\s*(.+?)\s*__/g, '$1');
 }
 
+function tidy(text: string) {
+  return text
+    .replace(/\b(invoice)\s*#\s*(?=\d)/gi, '$1 #')
+    .replace(/\b(invoice)\s*#\s*(?=[A-Za-z])/gi, '$1 ')
+    .replace(/[ \t]+([,.;:!?)])/g, '$1')
+    .replace(/\([ \t]+/g, '(')
+    .replace(/(\S)[ \t]{2,}/g, '$1 ');
+}
+
 export function splitSubject(text: string): { subject: string; body: string } {
-  const plain = stripEmphasis(text);
+  const plain = tidy(stripEmphasis(text));
   const match = plain.match(SUBJECT_LINE);
   if (!match || match.index === undefined) return { subject: '', body: plain.trim() };
   const body = (plain.slice(0, match.index) + plain.slice(match.index + match[0].length)).trim();
@@ -82,7 +91,7 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/
 export function highlightParts(text: string, literals: string[], currency = '') {
   const code = /^[A-Z]{3}$/.test(currency) ? currency : '';
   const patterns = [
-    ...literals.filter((l) => l.trim().length > 2).map(escape),
+    ...literals.filter((l) => l.trim().length > 2).map((l) => `(?:#\\s?)?${escape(l.trim())}`),
     ...(code ? [`${code}\\s?${AMOUNT}`, `${AMOUNT}\\s?${code}\\b`] : []),
     ...BASE_HIGHLIGHTS,
   ];

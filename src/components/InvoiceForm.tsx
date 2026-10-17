@@ -97,7 +97,7 @@ function AmountField({ amount, currency, onChange }: { amount: string; currency:
             </PopoverTrigger>
             <PopoverContent className="w-72 p-0" align="end">
               <Command>
-                <CommandInput placeholder="Search currency…" />
+                <CommandInput id="currency-search" name="currency-search" placeholder="Search currency…" />
                 <CommandList>
                   <CommandEmpty>No currency found.</CommandEmpty>
                   <CommandGroup>
@@ -212,9 +212,7 @@ function StatusField({ dueDate }: { dueDate: string }) {
         role="status"
         className={cn(
           'flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm',
-          overdue
-            ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
-            : 'text-muted-foreground'
+          overdue ? 'border-firm/30 bg-firm-soft text-firm' : 'text-muted-foreground'
         )}
       >
         <Clock className="size-3.5" />
@@ -235,7 +233,7 @@ export function InvoiceForm({ form, onChange, highlight }: Props) {
     if (!groups.length) return;
     animate(
       groups,
-      { boxShadow: ['0 0 0 3px rgba(161, 161, 170, 0.7)', '0 0 0 3px rgba(161, 161, 170, 0)'] },
+      { boxShadow: ['0 0 0 3px rgba(163, 160, 152, 0.7)', '0 0 0 3px rgba(163, 160, 152, 0)'] },
       { duration: 1.6, ease: 'easeOut' }
     ).then(() => groups.forEach((el) => (el.style.boxShadow = '')));
   }, [highlight, animate, scope]);
@@ -264,14 +262,23 @@ export function InvoiceForm({ form, onChange, highlight }: Props) {
           onChange={onChange}
           placeholder="INV-001"
         />
-        <Field
-          name="senderName"
-          title="Sign as"
-          value={form.senderName}
-          onChange={onChange}
-          placeholder="Your name"
-          autoComplete="name"
-        />
+        <div className="grid gap-1.5">
+          <Label htmlFor="signAs" className={labelClass}>
+            Sign as
+          </Label>
+          <Input
+            id="signAs"
+            name="sign-as-display"
+            value={form.senderName}
+            onChange={(e) => onChange('senderName', e.target.value)}
+            placeholder="Your name"
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore
+            data-form-type="other"
+          />
+        </div>
         <Field
           name="workDescription"
           title="Work description"

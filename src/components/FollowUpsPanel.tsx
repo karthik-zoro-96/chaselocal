@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Tabs as TabsPrimitive } from 'radix-ui';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { CircleAlert, Copy, Lightbulb, Mail, RefreshCw, Send } from 'lucide-react';
+import { CircleAlert, Copy, Download, Lightbulb, Mail, RefreshCw, Send, Share } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,12 +44,13 @@ type Props = {
   dueDate: string;
   daysOverdue: string;
   senderName: string;
+  invoiceFile: File | null;
   onUpdate: (index: number, draft: Draft) => void;
   onGenerate: () => void;
 };
 
 function PreviewBox({ loading, children }: { loading: boolean; children?: React.ReactNode }) {
-  const bar = cn('h-2.5', !loading && 'animate-none');
+  const bar = cn('h-2.5 bg-foreground/10', !loading && 'animate-none');
   return (
     <div className="space-y-4 rounded-lg border p-5" aria-busy={loading}>
       <Skeleton className={cn(bar, 'w-1/2')} />
@@ -96,7 +97,7 @@ function StatusLabel({ status, stale, onGenerate }: Pick<Props, 'status' | 'stal
 
 export function FollowUpsPanel(props: Props) {
   const { status, drafts, raw, error, canGenerate, highlights, currency, dueDate, daysOverdue, senderName } = props;
-  const { onUpdate, onGenerate } = props;
+  const { invoiceFile, onUpdate, onGenerate } = props;
   const recommended = recommendedStage(daysOverdue);
   const [active, setActive] = useState(String(recommended ?? 0));
   const [tweaking, setTweaking] = useState<string | null>(null);
@@ -106,6 +107,26 @@ export function FollowUpsPanel(props: Props) {
   const finalFrom = dueDate ? stageStartDate(dueDate, 2) : null;
   const nextStage = recommended !== null && recommended < 2 ? recommended + 1 : null;
   const nextFrom = nextStage !== null && dueDate ? stageStartDate(dueDate, nextStage) : null;
+  const focused = hasTabs ? Number(active) : status === 'waiting' ? null : recommended;
+  const fileKind = invoiceFile?.type === 'application/pdf' ? 'PDF' : 'invoice';
+  const canShareFile = hasTabs && !!invoiceFile && !!navigator.canShare?.({ files: [invoiceFile] });
+
+  const handOver = async (file: File) => {
+    if (canShareFile) {
+      try {
+        await navigator.share({ files: [file], title: file.name });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      }
+    }
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   const copy = async (text: string, what: string) => {
     try {
@@ -117,17 +138,18 @@ export function FollowUpsPanel(props: Props) {
   };
 
   const applyTweak = async (draft: Draft, index: number, tweak: string, label: string) => {
+    const stage = STAGES[index].label;
     setTweaking(tweak);
     try {
       const data = await postApi<{ draft: string }>('/api/refine', {
         subject: draft.subject,
         body: draft.body,
         tweak,
-        stage: draft.label,
+        stage,
       });
       const next = splitSubject(data.draft);
       onUpdate(index, { label: draft.label, subject: next.subject || draft.subject, body: next.body });
-      toast.success(`${draft.label} draft updated: ${label.toLowerCase()}`);
+      toast.success(`${stage} draft updated: ${label.toLowerCase()}`);
     } catch (err) {
       toast.error((err instanceof Error && err.message) || 'Tweak failed');
     } finally {
@@ -153,7 +175,7 @@ export function FollowUpsPanel(props: Props) {
           <TabsPrimitive.Root value={active} onValueChange={setActive} className="space-y-4">
             <TabsPrimitive.List aria-label="Follow-up stage" className="grid grid-cols-3 gap-3">
               {STAGES.map((stage, i) => {
-                const here = hasTabs && i === recommended;
+                const dim = focused !== null && i !== focused;
                 return (
                   <TabsPrimitive.Trigger
                     key={stage.label}
@@ -167,25 +189,26 @@ export function FollowUpsPanel(props: Props) {
                     <span
                       className={cn(
                         'block h-0.5 rounded-full transition-opacity',
-                        stage.dot,
-                        hasTabs && 'opacity-30 group-hover/stage:opacity-60 group-data-[state=active]/stage:opacity-100'
+                        stage.line,
+                        dim && 'opacity-25',
+                        dim && hasTabs && 'group-hover/stage:opacity-60'
                       )}
                     />
                     <span
                       className={cn(
                         'mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-medium',
-                        hasTabs && 'text-muted-foreground group-data-[state=active]/stage:text-foreground'
+                        dim && 'text-muted-foreground'
                       )}
                     >
                       {stage.label}
-                      {here && (
-                        <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[0.7rem] font-medium text-amber-700 dark:text-amber-400">
+                      {i === recommended && status !== 'waiting' && (
+                        <span className={cn('rounded-full px-1.5 py-px text-[0.7rem] font-medium', stage.pill)}>
                           Day {daysOverdue}
-                          <span className="max-sm:hidden"> · you&apos;re here</span>
+                          <span className="max-sm:hidden"> · recommended</span>
                         </span>
                       )}
                     </span>
-                    <span className="block font-mono text-xs text-muted-foreground">
+                    <span className={cn('block font-mono text-xs text-muted-foreground', dim && 'opacity-70')}>
                       {i === 2 && finalFrom ? `From ${format(finalFrom, 'MMM d')}` : stage.range}
                     </span>
                   </TabsPrimitive.Trigger>
@@ -269,16 +292,23 @@ export function FollowUpsPanel(props: Props) {
                             </div>
                           )}
 
-                          <div className="p-4 text-sm leading-7 break-words whitespace-pre-wrap">
-                            {highlightParts(body, highlights, currency).map((part, j) =>
-                              part.highlight ? (
-                                <mark key={j} className="rounded-sm bg-muted px-1 py-0.5 font-medium text-foreground">
-                                  {part.text}
-                                </mark>
-                              ) : (
-                                <span key={j}>{part.text}</span>
-                              )
-                            )}
+                          <div className="space-y-4.5 p-4 text-sm leading-[1.6] break-words">
+                            {body.split(/\n\s*\n/).map((paragraph, k) => (
+                              <p key={k} className="whitespace-pre-line">
+                                {highlightParts(paragraph, highlights, currency).map((part, j) =>
+                                  part.highlight ? (
+                                    <span
+                                      key={j}
+                                      className="rounded-sm bg-muted px-1 font-medium text-foreground box-decoration-clone"
+                                    >
+                                      {part.text}
+                                    </span>
+                                  ) : (
+                                    part.text
+                                  )
+                                )}
+                              </p>
+                            ))}
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2.5">
@@ -299,11 +329,17 @@ export function FollowUpsPanel(props: Props) {
                           </div>
                         </div>
 
-                        <div className="flex justify-end gap-2">
+                        <div className="flex flex-wrap justify-end gap-2">
                           <Button variant="outline" onClick={() => copy(body, 'Draft')}>
                             <Copy />
                             Copy
                           </Button>
+                          {invoiceFile && (
+                            <Button variant="outline" onClick={() => handOver(invoiceFile)}>
+                              {canShareFile ? <Share /> : <Download />}
+                              {canShareFile ? 'Share' : 'Download'} {fileKind}
+                            </Button>
+                          )}
                           <Button asChild>
                             <a href={`mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(body)}`}>
                               <Send />
@@ -332,6 +368,7 @@ export function FollowUpsPanel(props: Props) {
         <span>
           Attach the original invoice to your follow-up so there&apos;s no &ldquo;I didn&apos;t get the
           attachment&rdquo; delay.
+          {invoiceFile && ' Email links can\u2019t carry files, so grab it with the button next to Open in email.'}
         </span>
       </p>
     </section>

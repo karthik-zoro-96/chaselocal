@@ -55,7 +55,7 @@ function snapshotOf(fields: InvoiceFields) {
 
 export default function Home() {
   const [form, setForm] = useState<InvoiceFields>(EMPTY_FORM);
-  const [fileName, setFileName] = useState('');
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [fieldsRead, setFieldsRead] = useState(0);
   const [manual, setManual] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -68,7 +68,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const showForm = !!fileName || manual;
+  const fileName = invoiceFile?.name ?? '';
+  const showForm = !!invoiceFile || manual;
   const status: PanelStatus = loading
     ? 'loading'
     : error
@@ -80,6 +81,10 @@ export default function Home() {
           : 'waiting';
   const stale = status === 'ready' && generation.snapshot !== snapshotOf(form);
   const canGenerate = !!(form.clientName.trim() && form.amount.trim());
+  const shown = status === 'idle' ? form : generation;
+  const jumpLabel = { idle: 'Write follow-ups', loading: 'Writing drafts…', ready: 'Drafts ready', error: 'See error' }[
+    status === 'waiting' ? 'idle' : status
+  ];
 
   const clearDrafts = () => {
     setRawDrafts('');
@@ -157,7 +162,7 @@ export default function Home() {
       next.daysOverdue = overdueFrom(next.dueDate);
 
       setForm(next);
-      setFileName(file.name);
+      setInvoiceFile(file);
       setFieldsRead(found.length);
       setManual(false);
       clearDrafts();
@@ -188,7 +193,7 @@ export default function Home() {
 
   const startOver = () => {
     setForm(EMPTY_FORM);
-    setFileName('');
+    setInvoiceFile(null);
     setManual(false);
     setUploadError('');
     clearDrafts();
@@ -216,6 +221,12 @@ export default function Home() {
                     onFile={handleFile}
                     onReset={startOver}
                   />
+                  <a
+                    href="#follow-ups"
+                    className="-mt-3 block text-sm font-medium underline-offset-4 hover:underline lg:hidden"
+                  >
+                    {jumpLabel} ↓
+                  </a>
                   <InvoiceForm form={form} onChange={updateField} highlight={highlight} />
                 </>
               ) : (
@@ -262,9 +273,10 @@ export default function Home() {
               canGenerate={canGenerate}
               highlights={[form.invoiceNumber, form.workDescription]}
               currency={form.currency}
-              dueDate={generation.dueDate}
-              daysOverdue={generation.overdue}
+              dueDate={shown.dueDate}
+              daysOverdue={status === 'idle' ? form.daysOverdue : generation.overdue}
               senderName={form.senderName}
+              invoiceFile={invoiceFile}
               onUpdate={updateDraft}
               onGenerate={generate}
             />
