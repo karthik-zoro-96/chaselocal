@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 const description =
-  "Drop an overdue invoice and get three ready-to-send follow-up emails (Polite, Firm and Final notice) written by an open-source model. Free, no sign-up.";
+  "Turn an overdue invoice into three ready-to-send follow-ups: Polite, Firm and Final notice. Free, open-source AI, no sign-up.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://chaselocal.vercel.app"),
@@ -52,7 +53,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
