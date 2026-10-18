@@ -284,9 +284,23 @@ export default function Home() {
         </main>
 
         <footer className="border-t">
-          <div className="mx-auto max-w-6xl px-4 py-5 text-sm text-muted-foreground sm:px-6">
-            <span className="font-medium text-foreground">ChaseLocal</span> · Respectful follow-ups for independent
-            professionals.
+          <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-5 text-sm text-muted-foreground sm:px-6">
+            <p>
+              <span className="font-medium text-foreground">ChaseLocal</span> · Respectful follow-ups for independent
+              professionals.
+            </p>
+            <p className="text-xs text-pretty">
+              Photos are read on your device. The invoice text is sent to an open-source Llama model hosted on Groq to
+              write the drafts. Nothing is saved.{' '}
+              <a
+                href="https://github.com/karthik-zoro-96/chaselocal/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                Feedback &amp; source
+              </a>
+            </p>
           </div>
         </footer>
 
