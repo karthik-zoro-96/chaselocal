@@ -295,11 +295,15 @@ export function FollowUpsPanel(props: Props) {
                           <div className="space-y-4.5 p-4 text-sm leading-[1.6] break-words">
                             {body.split(/\n\s*\n/).map((paragraph, k) => (
                               <p key={k} className="whitespace-pre-line">
-                                {highlightParts(paragraph, highlights, currency).map((part, j) =>
+                                {highlightParts(paragraph, highlights, currency).map((part, j, parts) =>
                                   part.highlight ? (
                                     <span
                                       key={j}
-                                      className="rounded-sm bg-muted px-1 font-medium text-foreground box-decoration-clone"
+                                      className={cn(
+                                        'rounded-sm bg-muted px-1 font-medium text-foreground box-decoration-clone',
+                                        /\S$/.test(parts[j - 1]?.text ?? '') && 'pl-0.5',
+                                        /^\S/.test(parts[j + 1]?.text ?? '') && 'pr-0.5'
+                                      )}
                                     >
                                       {part.text}
                                     </span>
